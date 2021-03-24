@@ -243,6 +243,11 @@ python train.py --outdir=~/training-runs --data=~/mydataset.zip --gpus=1 --dry-r
 python train.py --outdir=~/training-runs --data=~/mydataset.zip --gpus=1
 ```
 
+My commands
+```
+python train.py --outdir=training-runs --data=data/cifar10.zip --gpus=1
+```
+
 The first command is optional; it validates the arguments, prints out the training configuration, and exits. The second command kicks off the actual training.
 
 In this example, the results are saved to a newly created directory `~/training-runs/<ID>-mydataset-auto1`, controlled by `--outdir`. The training exports network pickles (`network-snapshot-<INT>.pkl`) and example images (`fakes<INT>.png`) at regular intervals (controlled by `--snap`). For each pickle, it also evaluates FID (controlled by `--metrics`) and logs the resulting scores in `metric-fid50k_full.jsonl` (as well as TFEvents if TensorBoard is installed).

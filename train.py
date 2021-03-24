@@ -29,7 +29,33 @@ class UserError(Exception):
 
 #----------------------------------------------------------------------------
 
+def get_prev_ckpt(outdir):
+    """
+    Get the latest pkl from the directory with the largest run_id 
+    """
+    # Find latest run by id
+    prev_run_dirs = []
+    if os.path.isdir(outdir):
+        prev_run_dirs = [x for x in os.listdir(outdir) if os.path.isdir(os.path.join(outdir, x))]
+    prev_run_ids = [re.match(r'^\d+', x) for x in prev_run_dirs]
+    prev_run_ids = [int(x.group()) for x in prev_run_ids if x is not None]
+    latest_run_id = max(prev_run_ids, default=-1)
+    if latest_run_id == -1:
+        return ''
+    else:
+        latest_run_dir = [x for x in prev_run_dirs if x.startswith(f'{latest_run_id:05d}')][0]
+
+        # Find latest pkl by tick
+        pkl_files = [x for x in os.listdir(os.path.join(outdir, latest_run_dir)) if x.startswith('network-snapshot')]
+        ticks = [int(x.split('.')[0].split('-')[-1]) for x in pkl_files]
+        latest_tick = max(ticks, default=0)
+        latest_pkl_name = f'network-snapshot-{latest_tick:06d}.pkl'
+
+        prev_pkl_path = os.path.join(outdir, latest_run_dir, latest_pkl_name)
+        return prev_pkl_path
+
 def setup_training_loop_kwargs(
+    outdir     = None, 
     # General options (not included in desc).
     gpus       = None, # Number of GPUs: <int>, default = 1 gpu
     snap       = None, # Snapshot interval: <int>, default = 50 ticks
@@ -57,6 +83,7 @@ def setup_training_loop_kwargs(
     # Transfer learning.
     resume     = None, # Load previous network: 'noresume' (default), 'ffhq256', 'ffhq512', 'ffhq1024', 'celebahq256', 'lsundog256', <file>, <url>
     freezed    = None, # Freeze-D: <int>, default = 0 discriminator layers
+    resume_from_prev = None, 
 
     # Performance options (not included in desc).
     fp32       = None, # Disable mixed-precision training: <bool>, default = False
@@ -153,6 +180,7 @@ def setup_training_loop_kwargs(
 
     cfg_specs = {
         'auto':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1,     gamma=-1,   ema=-1,  ramp=0.05, map=2), # Populated dynamically based on resolution and GPU count.
+        'auto8':      dict(ref_gpus=-1, kimg=25000,  mb=-1, mbstd=-1, fmaps=-1,  lrate=-1,     gamma=-1,   ema=-1,  ramp=0.05, map=8), # Populated dynamically based on resolution and GPU count.
         'stylegan2': dict(ref_gpus=8,  kimg=25000,  mb=32, mbstd=4,  fmaps=1,   lrate=0.002,  gamma=10,   ema=10,  ramp=None, map=8), # Uses mixed-precision, unlike the original StyleGAN2.
         'paper256':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=0.5, lrate=0.0025, gamma=1,    ema=20,  ramp=None, map=8),
         'paper512':  dict(ref_gpus=8,  kimg=25000,  mb=64, mbstd=8,  fmaps=1,   lrate=0.0025, gamma=0.5,  ema=20,  ramp=None, map=8),
@@ -162,7 +190,7 @@ def setup_training_loop_kwargs(
 
     assert cfg in cfg_specs
     spec = dnnlib.EasyDict(cfg_specs[cfg])
-    if cfg == 'auto':
+    if cfg.startswith('auto'):
         desc += f'{gpus:d}'
         spec.ref_gpus = gpus
         res = args.training_set_kwargs.resolution
@@ -299,16 +327,24 @@ def setup_training_loop_kwargs(
     }
 
     assert resume is None or isinstance(resume, str)
-    if resume is None:
-        resume = 'noresume'
-    elif resume == 'noresume':
-        desc += '-noresume'
-    elif resume in resume_specs:
-        desc += f'-resume{resume}'
-        args.resume_pkl = resume_specs[resume] # predefined url
+    if resume_from_prev:
+        resume_pkl = get_prev_ckpt(outdir)
+        if resume_pkl == '':
+            resume = 'noresume' # first run
+        else:
+            desc += '-resumefromprev'
+            args.resume_pkl = resume_pkl
     else:
-        desc += '-resumecustom'
-        args.resume_pkl = resume # custom path or url
+        if resume is None:
+            resume = 'noresume'
+        elif resume == 'noresume':
+            desc += '-noresume'
+        elif resume in resume_specs:
+            desc += f'-resume{resume}'
+            args.resume_pkl = resume_specs[resume] # predefined url
+        else:
+            desc += '-resumecustom'
+            args.resume_pkl = resume # custom path or url
 
     if resume != 'noresume':
         args.ada_kimg = 100 # make ADA react faster at the beginning
@@ -413,7 +449,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--mirror', help='Enable dataset x-flips [default: false]', type=bool, metavar='BOOL')
 
 # Base config.
-@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'stylegan2', 'paper256', 'paper512', 'paper1024', 'cifar']))
+@click.option('--cfg', help='Base config [default: auto]', type=click.Choice(['auto', 'auto8', 'stylegan2', 'paper256', 'paper512', 'paper1024', 'cifar']))
 @click.option('--gamma', help='Override R1 gamma', type=float)
 @click.option('--kimg', help='Override training duration', type=int, metavar='INT')
 @click.option('--batch', help='Override batch size', type=int, metavar='INT')
@@ -427,6 +463,7 @@ class CommaSeparatedList(click.ParamType):
 # Transfer learning.
 @click.option('--resume', help='Resume training [default: noresume]', metavar='PKL')
 @click.option('--freezed', help='Freeze-D [default: 0 layers]', type=int, metavar='INT')
+@click.option('--resume_from_prev', help='Resume training from previous run (for handling preemption/ckpting) [default: 0 ]', type=int, metavar='INT')
 
 # Performance options.
 @click.option('--fp32', help='Disable mixed-precision training', type=bool, metavar='BOOL')
@@ -483,7 +520,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
 
     # Setup training options.
     try:
-        run_desc, args = setup_training_loop_kwargs(**config_kwargs)
+        run_desc, args = setup_training_loop_kwargs(outdir, **config_kwargs)
     except UserError as err:
         ctx.fail(err)
 

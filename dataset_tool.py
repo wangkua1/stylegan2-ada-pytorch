@@ -194,6 +194,63 @@ def open_mnist(images_gz: str, *, max_images: Optional[int]):
 
     return max_idx, iterate_images()
 
+
+#----------------------------------------------------------------------------
+
+def open_celeba(name):
+    import torch
+    import sys 
+    sys.path.append('../boosted-implicit-models')
+    import data
+    dat = data.load_data(name)
+
+    images = torch.cat([dat['X_train'], dat['X_test']]).cpu().numpy()
+    images = ((images * .5 + .5) * 255).astype('uint8')
+    labels = torch.cat([dat['Y_train'], dat['Y_test']]).cpu().numpy().astype('uint8')
+
+    images = images.transpose([0, 2, 3, 1]) # NCHW -> NHWC
+    assert images.shape[1:] == (64, 64, 3) and images.dtype == np.uint8
+    assert np.min(images) == 0 and np.max(images) == 255
+
+    max_idx = len(images)
+
+    def iterate_images():
+        for idx, img in enumerate(images):
+            yield dict(img=img, label=int(labels[idx]))
+            if idx >= max_idx-1:
+                break
+
+    return max_idx, iterate_images()
+
+def open_db():
+    import torch
+    import sys 
+    sys.path.append('../boosted-implicit-models')
+    import data
+    dat = data.load_data('celeba-aux')
+
+    images = torch.cat([dat['X_train'], dat['X_test']]).cpu().numpy()
+    images = ((images * .5 + .5) * 255).astype('uint8')
+    labels = torch.cat([dat['Y_train'], dat['Y_test']]).cpu().numpy().astype('uint8')
+
+    # Get 5000 images
+    images = images[:5000]
+    labels = labels[:5000]
+
+    images = images.transpose([0, 2, 3, 1]) # NCHW -> NHWC
+    assert images.shape[1:] == (64, 64, 3) and images.dtype == np.uint8
+    assert np.min(images) == 0 and np.max(images) == 255
+
+    max_idx = len(images)
+
+    def iterate_images():
+        for idx, img in enumerate(images):
+            yield dict(img=img, label=int(labels[idx]))
+            if idx >= max_idx-1:
+                break
+
+    return max_idx, iterate_images()
+
 #----------------------------------------------------------------------------
 
 def make_transform(
@@ -250,6 +307,11 @@ def make_transform(
 #----------------------------------------------------------------------------
 
 def open_dataset(source, *, max_images: Optional[int]):
+    if 'db' == source:
+        return open_db()
+    if 'celeba' in source:
+        return open_celeba(source)
+
     if os.path.isdir(source):
         if source.rstrip('/').endswith('_lmdb'):
             return open_lmdb(source, max_images=max_images)

@@ -58,6 +58,8 @@ def generate_style_mix(
     \b
     python style_mixing.py --outdir=out --rows=85,100,75,458,1500 --cols=55,821,1789,293 \\
         --network=https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/metfaces.pkl
+
+    python style_mixing.py --styles=0-3 --outdir=out-celeba/0-3 --rows=85,100,75,458,1500 --cols=55,821,1789,293  --network=/scratch/hdd001/home/wangkuan/stylegan/celeba-aux/Mar22-auto/00001-celeba-aux-auto2-resumefromprev/network-snapshot-002298.pkl
     """
     print('Loading networks from "%s"...' % network_pkl)
     device = torch.device('cuda')
