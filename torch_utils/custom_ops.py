@@ -45,6 +45,7 @@ _cached_plugins = dict()
 
 def get_plugin(module_name, sources, **build_kwargs):
     assert verbosity in ['none', 'brief', 'full']
+    raise
 
     # Already cached?
     if module_name in _cached_plugins:
