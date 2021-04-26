@@ -40,13 +40,15 @@ def num_range(s: str) -> List[int]:
 @click.option('--noise-mode', help='Noise mode', type=click.Choice(['const', 'random', 'none']), default='const', show_default=True)
 @click.option('--outdir', type=str, required=True)
 @click.option('--fixed_id', type=int, required=True)
+@click.option('--noise', type=bool)
 def attack(
     network_pkl: str,
     col_styles: List[int],
     truncation_psi: float,
     noise_mode: str,
     outdir: str,
-    fixed_id: int
+    fixed_id: int,
+    noise: bool
 ):
     """Generate images using pretrained network pickle.
 
@@ -72,16 +74,21 @@ def attack(
     os.makedirs(os.path.join(outdir, 'ws_pt'), exist_ok=True)
 
     print('Generating W vectors...')
-    with torch.no_grad():
-        all_z = np.random.randn(100, G.z_dim)
-        all_w = G.mapping(torch.from_numpy(all_z).to(device), None)
-        w_avg = G.mapping.w_avg
-        all_w = w_avg + (all_w - w_avg) * truncation_psi
-    style_mask = torch.zeros(1, all_w.shape[1], 1).to(device)
-    style_mask[:, col_styles, :] = 1
-    opt_w = all_w.clone()
-    opt_w.requires_grad_()
-    optimizerG = optim.Adam([opt_w], lr=0.01) 
+    if noise:
+        all_z = torch.randn((100, G.z_dim), device=device, requires_grad=True)
+        optimizerG = optim.Adam([all_z], lr=0.01) 
+
+    else:
+        with torch.no_grad():
+            all_z = np.random.randn(100, G.z_dim)
+            all_w = G.mapping(torch.from_numpy(all_z).to(device), None)
+            w_avg = G.mapping.w_avg
+            all_w = w_avg + (all_w - w_avg) * truncation_psi
+        style_mask = torch.zeros(1, all_w.shape[1], 1).to(device)
+        style_mask[:, col_styles, :] = 1
+        opt_w = all_w.clone()
+        opt_w.requires_grad_()
+        optimizerG = optim.Adam([opt_w], lr=0.01) 
     
     # print('Generating images...')
     # all_images = G.synthesis(all_w, noise_mode=noise_mode)
@@ -100,7 +107,10 @@ def attack(
     for i in pbar:
         optimizerG.zero_grad()
         # all_w[:, col_styles] = opt_w
-        w = (1-style_mask) * all_w + style_mask * opt_w
+        if noise:
+            w = G.mapping(all_z)
+        else:
+            w = (1-style_mask) * all_w + style_mask * opt_w
         fake = G.synthesis(w, noise_mode=noise_mode)
         # import ipdb; ipdb.set_trace()
         lsm =  target_logsoftmax(fake.clamp(-1,1) / 2 + .5)
