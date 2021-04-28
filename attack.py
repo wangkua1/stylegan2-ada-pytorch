@@ -74,6 +74,16 @@ def attack(
     os.makedirs(os.path.join(outdir, 'ws_pt'), exist_ok=True)
 
     print('Generating W vectors...')
+
+    """
+    # with 1 z for each layer
+
+    zs = torch.randn(N, L, Z)
+    ws = G.mapping(z.reshape(-1, zdim), None)  # (N * L, L, zdim)
+    w = w[:, 0].reshape(N, -1, zdim) # (N, L, Z)
+
+    G.synthesis(w)
+    """
     if noise:
         all_z = torch.randn((100, G.z_dim), device=device, requires_grad=True)
         optimizerG = optim.Adam([all_z], lr=0.01) 
