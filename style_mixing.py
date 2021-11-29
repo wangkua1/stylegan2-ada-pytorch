@@ -109,7 +109,9 @@ def generate_style_mix(
             if col_idx == 0:
                 key = (row_seed, row_seed)
             canvas.paste(PIL.Image.fromarray(image_dict[key], 'RGB'), (W * col_idx, H * row_idx))
-    canvas.save(f'{outdir}/grid.png')
+    base, dirname = os.path.split(outdir)
+    fpath = os.path.join(base, f'grid_{dirname}.png')
+    canvas.save(fpath)
 
 
 #----------------------------------------------------------------------------

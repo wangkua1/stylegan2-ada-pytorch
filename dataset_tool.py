@@ -222,6 +222,59 @@ def open_celeba(name):
 
     return max_idx, iterate_images()
 
+#----------------------------------------------------------------------------
+
+def open_chestxray(name):
+    import sys
+    sys.path.append('../boosted-implicit-models')
+    import data
+    dat = data.load_data(name, imgsize=128)
+
+    images = dat['X_train'].numpy()
+    images = ((images * .5 + .5) * 255).astype('uint8')
+    labels = np.zeros((len(images,))).astype('uint8')
+
+    images = images.transpose([0, 2, 3, 1])  # NCHW -> NHWC
+    images = images[..., 0]  #NHW
+    assert images.shape[1:] == (128, 128) and images.dtype == np.uint8
+    assert np.min(images) == 0 and np.max(images) == 255
+
+    max_idx = len(images)
+
+    def iterate_images():
+        for idx, img in enumerate(images):
+            yield dict(img=img, label=int(labels[idx]))
+            if idx >= max_idx-1:
+                break
+
+    return max_idx, iterate_images()
+
+
+def open_emnist(name):
+    import sys
+    sys.path.append('../boosted-implicit-models')
+    import data
+    dat = data.load_data('emnist', imgsize=64)
+
+    images = dat['X_train'].numpy()
+    images = ((images * .5 + .5) * 255).astype('uint8')
+    labels = np.zeros((len(images,))).astype('uint8')
+
+    images = images.transpose([0, 2, 3, 1])  # NCHW -> NHWC
+    images = images[..., 0]  #NHW
+    assert images.shape[1:] == (64, 64) and images.dtype == np.uint8
+    assert np.min(images) == 0 and np.max(images) == 255
+
+    max_idx = len(images)
+
+    def iterate_images():
+        for idx, img in enumerate(images):
+            yield dict(img=img, label=int(labels[idx]))
+            if idx >= max_idx-1:
+                break
+
+    return max_idx, iterate_images()
+
 def open_db():
     import torch
     import sys 
@@ -311,6 +364,10 @@ def open_dataset(source, *, max_images: Optional[int]):
         return open_db()
     if 'celeba' in source:
         return open_celeba(source)
+    if 'chestxray' in source:
+        return open_chestxray(source)
+    if 'emnist' in source:
+        return open_emnist(source)
 
     if os.path.isdir(source):
         if source.rstrip('/').endswith('_lmdb'):
